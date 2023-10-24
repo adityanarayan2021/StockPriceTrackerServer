@@ -1,6 +1,7 @@
 const stockPrice = require("express").Router();
 const axios = require("axios");
 const StockPrice = require("../model/stockPrice");
+const schedule = require('node-schedule');
 
 stockPrice.get("/Stocks/search", async (req, res) => {
   const keyword = req.query.keyword;
@@ -63,13 +64,10 @@ stockPrice.get('/getAllStock', async (req, res) => {
     if (response.data.quotes && response.data.quotes.length > 0) {
       const stockData = response.data.quotes[0];
 
-      // Calculate the starting index based on the page and limit
       const startIndex = (page - 1) * limit;
 
-      // Extract a slice of the data based on the pagination parameters
       const paginatedData = response.data.quotes.slice(startIndex, startIndex + limit);
 
-      // Create a new response object with paginated data
       const paginatedResponse = {
         currentData: paginatedData,
         totalCount: response.data.count,
@@ -95,6 +93,37 @@ stockPrice.get('/getAllStock', async (req, res) => {
   }
 });
 
+const updateStockData = async () => {
+  try {
+  const options = {
+    method: 'GET',
+    url: 'https://apidojo-yahoo-finance-v1.p.rapidapi.com/auto-complete',
+    params: {
+      q: 'tesla',
+      region: 'US',
+    },
+    headers: {
+      'X-RapidAPI-Key': '487a1b6efdmsh4c6b9e259211317p18e476jsnd3e0a94313ff',
+      'X-RapidAPI-Host': 'apidojo-yahoo-finance-v1.p.rapidapi.com',
+    },
+  };
+  const response = await axios.request(options);
+  const stockData = response.data.quotes[0];
+      const startIndex = (page - 1) * limit;
+      const filter = { symbol: stockData.score };
+      const update = {
+        name: stockData.shortname,
+        price: stockData.score,
+      };
 
+      const updateOptions = { upsert: true, new: true, setDefaultsOnInsert: true };
+      await StockPrice.findOneAndUpdate(filter, update, updateOptions);
+    } catch (error) {
+    console.log('Error in getStockData ==>', error)
+    }
+}
+
+// Schedule the stock price update task to run every minute
+const job = schedule.scheduleJob('*/1 * * * *', updateStockData);
 
 module.exports = stockPrice;
